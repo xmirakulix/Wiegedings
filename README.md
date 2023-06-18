@@ -32,4 +32,9 @@ Folgende Entitäten werden per Autodiscovery an Home Assistant übermittelt:
 | Number | Ergebnis der Kalibrierung
 | Number | Gewicht zum Kalibrieren
 | Number | Flasche Eigengewicht
-| Number | Flasche Füllung
+| Number | Flasche Gewicht Füllung
+| Switch | Debug Modus
+
+# Schaltplan
+
+![Schaltplan](doc/Wiegedings_Schematics.png)
