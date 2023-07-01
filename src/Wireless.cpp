@@ -1,6 +1,7 @@
-#include <Arduino.h>
-#include <ESP8266WiFi.h>
-#include <WifiSecret.h>
+#include "Wireless.h"
+#include "WifiSecret.h"
+
+WiFiClient wifiClient;
 
 void initWifi()
 {
