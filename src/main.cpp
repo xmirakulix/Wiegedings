@@ -16,4 +16,5 @@ void setup()
 void loop()
 {
     handleWifi();
+    handleMqtt();
 }
