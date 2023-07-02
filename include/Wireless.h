@@ -4,4 +4,6 @@
 extern WiFiClient wifiClient;
 
 void initWifi();
-String getHostname();
+void handleWifi();
+
+char *getHostname();

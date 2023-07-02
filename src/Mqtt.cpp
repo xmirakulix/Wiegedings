@@ -3,12 +3,12 @@
 #include <PubSubClient.h>
 
 PubSubClient client(wifiClient);
-const char m_CompileDate[] = __DATE__ " " __TIME__;
 
-void mqtt_setup()
+void initMqtt()
 {
+    Serial.println("MQTT init started...");
     client.setServer("homeassistant", 1883);
-    client.setCallback(mqtt_callback);
+    client.setCallback(onMqtt);
     client.setBufferSize(1024);
 
     // connect to MQTT broker
@@ -16,85 +16,110 @@ void mqtt_setup()
     {
         while (!client.connected())
         {
-            Serial.println("Connecting to MQTT...");
-            client.connect("Regnerdings", "mosquitto", "mosquitto", "/home/state", 1, true, "offline");
+            Serial.println("MQTT connecting...");
+            client.connect(getHostname(), "mosquitto", "mosquitto", "/home/state", 1, true, "offline");
             delay(100);
         }
-        Serial.println("Connected to MQTT");
-        delay(2000);
+        Serial.println("MQTT connected!");
+        delay(500);
 
-        char topic[100];
-        char cfgMsg[1024];
+        /**
+         * Sensor | Type "weight"
+         * Button | Tarieren
+         * Button | Kalibrierung durchführen
+         * Number | Ergebnis der Kalibrierung
+         * Number | Gewicht zum Kalibrieren
+         * Number | Flasche Eigengewicht
+         * Number | Flasche Gewicht Füllung
+         */
 
-        // configure device temp
-        strcpy(topic, "disc/sensor/Regnerdings/T/config");
-        strcpy(cfgMsg, "{");
-        sprintf(cfgMsg + strlen(cfgMsg), "  \"name\":          \"Temperature\",");
-        sprintf(cfgMsg + strlen(cfgMsg), "  \"unique_id\":     \"Temperature\",");
-        sprintf(cfgMsg + strlen(cfgMsg), "  \"device\":        { \"ids\" : [\"Regnerdings\"], \"name\" : \"Regnerdings\", \"mf\": \"xmirakulix\", \"mdl\": \"Regnerdings\", \"sw\": \"%s\" },", m_CompileDate);
-        sprintf(cfgMsg + strlen(cfgMsg), "  \"device_class\":  \"temperature\",");
-        sprintf(cfgMsg + strlen(cfgMsg), "  \"unit_of_measurement\":  \"°C\",");
-        sprintf(cfgMsg + strlen(cfgMsg), "  \"value_template\":\"{{ value_json.temperature}}\",");
-        sprintf(cfgMsg + strlen(cfgMsg), "  \"state_topic\":   \"disc/sensor/Regnerdings/state\"");
-        sprintf(cfgMsg + strlen(cfgMsg), "}");
+        char compileDate[] = __DATE__ " " __TIME__;
+        char deviceCfg[500];
+        sprintf(deviceCfg, "{ \"ids\" : [\"%s\"], \"name\" : \"Wiegedings\", \"mf\": \"xmirakulix\", \"sw\": \"%s\" } ", getHostname(), compileDate);
 
-        Serial.println("Sending temperature config message to HA");
-        client.publish(topic, cfgMsg, true);
+        generateSensor("Gewicht", deviceCfg, "weight", "g");
+        generateButton("Tarieren", deviceCfg);
+        generateButton("Kalibrieren", deviceCfg);
+        generateNumber("Kalibrierung", deviceCfg, "", "");
+        generateNumber("Kalibrierungsgewicht", deviceCfg, "weight", "g");
+        generateNumber("Flaschengewicht", deviceCfg, "weight", "g");
+        generateNumber("Fuellgewicht", deviceCfg, "weight", "g");
 
-        // configure device humidity
-        strcpy(topic, "disc/sensor/Regnerdings/H/config");
-        strcpy(cfgMsg, "{");
-        sprintf(cfgMsg + strlen(cfgMsg), "  \"name\":          \"Humidity\",");
-        sprintf(cfgMsg + strlen(cfgMsg), "  \"unique_id\":     \"Humidity\",");
-        sprintf(cfgMsg + strlen(cfgMsg), "  \"device\":        { \"identifiers\" : [\"Regnerdings\"], \"name\" : \"Regnerdings\" },");
-        sprintf(cfgMsg + strlen(cfgMsg), "  \"device_class\":  \"humidity\",");
-        sprintf(cfgMsg + strlen(cfgMsg), "  \"unit_of_measurement\":  \"%%\",");
-        sprintf(cfgMsg + strlen(cfgMsg), "  \"value_template\":\"{{ value_json.humidity}}\",");
-        sprintf(cfgMsg + strlen(cfgMsg), "  \"state_topic\":   \"disc/sensor/Regnerdings/state\"");
-        sprintf(cfgMsg + strlen(cfgMsg), "}");
-
-        Serial.println("Sending humidity config message to HA");
-        client.publish(topic, cfgMsg, true);
-        /*
-                for (int i = 1; i <= NUMPORTS; i++)
-                {
-                    char cmd_topic[50];
-
-                    // configure Ports
-                    sprintf(topic, "disc/switch/Regnerdings/P%d/config", i);
-                    sprintf(cmd_topic, "disc/switch/Regnerdings/P%d/set", i);
-
-                    strcpy(cfgMsg, "{");
-                    sprintf(cfgMsg + strlen(cfgMsg), "  \"name\":          \"Regnerdings P%d\",", i);
-                    sprintf(cfgMsg + strlen(cfgMsg), "  \"unique_id\":     \"Regnerdings_P%d\",", i);
-                    sprintf(cfgMsg + strlen(cfgMsg), "  \"device\":        { \"identifiers\" : [\"Regnerdings\"], \"name\" : \"Regnerdings\" },");
-                    sprintf(cfgMsg + strlen(cfgMsg), "  \"device_class\":  \"switch\",");
-                    sprintf(cfgMsg + strlen(cfgMsg), "  \"icon\":          \"mdi:sprinkler\",");
-                    sprintf(cfgMsg + strlen(cfgMsg), "  \"value_template\":\"{{ value_json.P%d}}\",", i);
-                    sprintf(cfgMsg + strlen(cfgMsg), "  \"state_topic\":   \"disc/switch/Regnerdings/state\",");
-                    sprintf(cfgMsg + strlen(cfgMsg), "  \"command_topic\": \"%s\"", cmd_topic);
-                    sprintf(cfgMsg + strlen(cfgMsg), "}");
-
-                    Serial.printf("Sending P%d config message to HA\n", i);
-                    client.publish(topic, cfgMsg, true);
-                    client.subscribe(cmd_topic);
-
-                    pinMode(m_Ports[i - 1], OUTPUT);
-                    setSwitch(i, false);
-                }
-        */
-        Serial.println("Config message sent, client state: " + String(client.state()));
-        delay(2000);
+        Serial.println("MQTT config messages sent, client state: " + String(client.state()));
     }
 }
 
-void mqtt_callback(char *topic, byte *payload, unsigned int length)
+void generateSensor(const char *name, const char *deviceCfg, const char *deviceClass, const char *unit)
+{
+    char topic[100];
+    char cfgMsg[1024];
+
+    sprintf(topic, "disc/sensor/%s/%s/config", getHostname(), name);
+    strcpy(cfgMsg, "{");
+    sprintf(cfgMsg + strlen(cfgMsg), "  \"name\":          \"%s\",", name);
+    sprintf(cfgMsg + strlen(cfgMsg), "  \"unique_id\":     \"%s-%s\",", getHostname(), name);
+    sprintf(cfgMsg + strlen(cfgMsg), "  \"device\":        %s ,", deviceCfg);
+    sprintf(cfgMsg + strlen(cfgMsg), "  \"device_class\":  \"%s\",", deviceClass);
+    sprintf(cfgMsg + strlen(cfgMsg), "  \"unit_of_measurement\":  \"%s\",", unit);
+    sprintf(cfgMsg + strlen(cfgMsg), "  \"value_template\":\"{{ value_json.%s }}\",", name);
+    sprintf(cfgMsg + strlen(cfgMsg), "  \"state_topic\":   \"disc/sensor/%s/state\"", getHostname());
+    sprintf(cfgMsg + strlen(cfgMsg), "}");
+
+    Serial.printf("Sending sensor '%s' config message to HA\n", name);
+    client.publish(topic, cfgMsg, true);
+}
+
+void generateButton(const char *name, const char *deviceCfg)
+{
+    char topic[100];
+    char cfgMsg[1024];
+
+    sprintf(topic, "disc/button/%s/%s/config", getHostname(), name);
+    strcpy(cfgMsg, "{");
+    sprintf(cfgMsg + strlen(cfgMsg), "  \"name\":         \"%s\",", name);
+    sprintf(cfgMsg + strlen(cfgMsg), "  \"unique_id\":    \"%s-%s\",", getHostname(), name);
+    sprintf(cfgMsg + strlen(cfgMsg), "  \"device\":        %s ,", deviceCfg);
+    sprintf(cfgMsg + strlen(cfgMsg), "  \"payload_press\": \"%s\",", name);
+    sprintf(cfgMsg + strlen(cfgMsg), "  \"command_topic\": \"disc/button/%s/command\"", getHostname());
+    sprintf(cfgMsg + strlen(cfgMsg), "}");
+
+    Serial.printf("Sending button '%s' config message to HA\n", name);
+    client.publish(topic, cfgMsg, true);
+}
+
+void generateNumber(const char *name, const char *deviceCfg, const char *deviceClass, const char *unit)
+{
+    char topic[100];
+    char cfgMsg[1024];
+
+    sprintf(topic, "disc/number/%s/%s/config", getHostname(), name);
+    strcpy(cfgMsg, "{");
+    sprintf(cfgMsg + strlen(cfgMsg), "  \"name\":         \"%s\",", name);
+    sprintf(cfgMsg + strlen(cfgMsg), "  \"unique_id\":    \"%s-%s\",", getHostname(), name);
+    sprintf(cfgMsg + strlen(cfgMsg), "  \"device\":        %s ,", deviceCfg);
+    if (strcmp(deviceClass, "") != 0)
+        sprintf(cfgMsg + strlen(cfgMsg), "  \"device_class\": \"%s\",", deviceClass);
+    sprintf(cfgMsg + strlen(cfgMsg), "  \"unit_of_measurement\":  \"%s\",", unit);
+    sprintf(cfgMsg + strlen(cfgMsg), "  \"mode\":             \"box\",");
+    sprintf(cfgMsg + strlen(cfgMsg), "  \"entity_category\":  \"config\",");
+    sprintf(cfgMsg + strlen(cfgMsg), "  \"command_template\": \"{ \\\"%s\\\": {{ value }} }\",", name);
+    sprintf(cfgMsg + strlen(cfgMsg), "  \"command_topic\":    \"disc/number/%s/command\",", getHostname());
+    sprintf(cfgMsg + strlen(cfgMsg), "  \"value_template\":   \"{{ value_json.%s }}\",", name);
+    sprintf(cfgMsg + strlen(cfgMsg), "  \"state_topic\":      \"disc/number/%s/state\"", getHostname());
+    sprintf(cfgMsg + strlen(cfgMsg), "}");
+
+    Serial.printf("Sending number '%s' config message to HA\n", name);
+    client.publish(topic, cfgMsg, true);
+}
+
+void onMqtt(char *topic, byte *payload, unsigned int length)
 {
     char msg[50] = "";
     for (byte i = 0; i < length; i++)
     {
         msg[i] = (char)payload[i];
     }
+    Serial.println("MQTT received: " + String(msg));
 
     /*     int port = parsePort(topic);
         Serial.printf("Message received on port '%d': %s\n", port, msg);

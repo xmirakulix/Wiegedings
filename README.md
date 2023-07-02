@@ -25,15 +25,13 @@ Steuerung und Übermittlung der Werte per Home Assistant MQTT Integration.
 Folgende Entitäten werden per Autodiscovery an Home Assistant übermittelt:
 | Entity Type | Feature
 | --- | --- 
-| Sensor | Type "weight"
-| Sensor | Füllstand in %
+| Sensor | Differenz zu Tara, Type "weight"
 | Button | Tarieren 
 | Button | Kalibrierung durchführen
 | Number | Ergebnis der Kalibrierung
 | Number | Gewicht zum Kalibrieren
 | Number | Flasche Eigengewicht
 | Number | Flasche Gewicht Füllung
-| Switch | Debug Modus
 
 # Schaltplan
 
